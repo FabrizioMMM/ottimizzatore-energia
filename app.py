@@ -168,14 +168,14 @@ html, body, [class*="css"] {
 """, unsafe_allow_html=True)
 
 # ── Solver ────────────────────────────────────────────────────────────────────
-def solve_optimization(demand, prices, cap_kw, flex_pct, blocked_from=0, blocked_to=0):
+def solve_optimization(demand, prices, cap_kw, flex_pct, work_from=1, work_to=24):
     """
     LP solver: minimizza costo totale spostando i carichi flessibili.
     demand: array 24 valori kWh
     prices: array 24 valori €/MWh
     cap_kw: potenza impegnata massima (kW = kWh per slot orario)
     flex_pct: frazione spostabile (0..1)
-    blocked_from/to: ore in cui non aggiungere carico (1-based, 0 = disabilitato)
+    work_from/to: finestra oraria in cui è POSSIBILE spostare carichi (1-based, inclusi)
     """
     n = 24
     D = np.array(demand, dtype=float)
@@ -185,12 +185,11 @@ def solve_optimization(demand, prices, cap_kw, flex_pct, blocked_from=0, blocked
     fixed = D * (1 - flex_pct)
     ub    = np.full(n, cap_kw)
 
-    # Applica blocco orario
-    if blocked_from > 0 and blocked_to > 0:
-        for i in range(n):
-            h = i + 1
-            if blocked_from <= h <= blocked_to:
-                ub[i] = fixed[i]
+    # Fuori dalla finestra operativa non si può aggiungere carico
+    for i in range(n):
+        h = i + 1
+        if h < work_from or h > work_to:
+            ub[i] = fixed[i]
 
     lb = np.minimum(fixed, ub)
 
@@ -369,8 +368,8 @@ with st.sidebar:
 
     cap_kw = st.number_input(
         "🔌 Potenza Impegnata (kW)",
-        min_value=1.0, max_value=100.0, value=3.0, step=0.5,
-        help="Potenza massima contrattuale. Domestico tipico: 3 kW. PMI: 6-15 kW."
+        min_value=0.5, value=3.0, step=0.5,
+        help="Potenza massima contrattuale. Domestico: 3 kW · PMI: 15-50 kW · Industria: 100-5000 kW"
     )
 
     flex_pct = st.slider(
@@ -379,12 +378,15 @@ with st.sidebar:
         help="Percentuale dei consumi che puoi spostare (es. lavatrice, lavastoviglie, pompa di calore)"
     )
 
-    st.markdown("**🚫 Ore vietate allo spostamento**")
+    st.markdown("**🕐 Finestra oraria operativa**")
+    st.caption("Ore in cui è possibile spostare i carichi (es. turno di lavoro)")
     col_b1, col_b2 = st.columns(2)
     with col_b1:
-        blocked_from = st.number_input("Da ora", min_value=0, max_value=24, value=0, step=1)
+        work_from = st.number_input("Dalle ore", min_value=1, max_value=24, value=1, step=1,
+                                    help="Prima ora in cui puoi spostare consumi (es. 8 per turno mattina)")
     with col_b2:
-        blocked_to = st.number_input("A ora", min_value=0, max_value=24, value=0, step=1)
+        work_to = st.number_input("Alle ore", min_value=1, max_value=24, value=24, step=1,
+                                  help="Ultima ora operativa (es. 19 per fabbrica monturno)")
 
     days_year = st.number_input(
         "📅 Giorni/anno di riferimento",
@@ -500,8 +502,8 @@ if run or 'optimized' in st.session_state:
                 demand, prices,
                 cap_kw=cap_kw,
                 flex_pct=flex_pct / 100,
-                blocked_from=blocked_from,
-                blocked_to=blocked_to
+                work_from=work_from,
+                work_to=work_to
             )
             st.session_state.optimized = opt
             st.session_state.opt_success = success
