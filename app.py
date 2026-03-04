@@ -684,10 +684,22 @@ if avvia or 'ottimizzato' in st.session_state:
         matrice[f"{pot} kW"] = riga
 
     df_matrice = pd.DataFrame(matrice).T
+
+    def colora_cella(val):
+        """Colora le celle della matrice scenari senza matplotlib."""
+        try:
+            v = float(val)
+        except:
+            return ''
+        if v >= 0.05:   return 'background-color: #6ee7b7; color: #064e3b; font-weight: 700'
+        elif v >= 0.02: return 'background-color: #a7f3d0; color: #065f46; font-weight: 700'
+        elif v >= 0.005: return 'background-color: #fef3c7; color: #92400e; font-weight: 700'
+        else:           return 'background-color: #fecaca; color: #991b1b; font-weight: 700'
+
     st.dataframe(
         df_matrice.style
             .format("€ {:.4f}")
-            .background_gradient(cmap='RdYlGn', axis=None),
+            .applymap(colora_cella),
         use_container_width=True
     )
 
